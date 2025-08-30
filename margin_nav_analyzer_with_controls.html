@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Margin & NAV Analyzer (Offline)</title>
+<style>
+  :root { --bg:#0b0f14; --fg:#e7eef7; --muted:#a0b4c8; --panel:#111722; --accent:#4da3ff; --grid:#213044; --shade:#9ec5ff44; }
+  html,body{height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;margin:0}
+  .wrap{max-width:1180px;margin:24px auto;padding:0 16px}
+  h1{font-size:20px;margin:0 0 12px 0;font-weight:600}
+  .card{background:var(--panel);border:1px solid #1b2433;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px 14px 10px 14px;margin:12px 0}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .row > *{flex:0 0 auto}
+  input[type=file], select, input[type=number]{background:#0d1320;border:1px solid #22314a;color:var(--fg);padding:8px 10px;border-radius:10px}
+  button, .btn{background:#142137;border:1px solid #274067;color:var(--fg);padding:8px 12px;border-radius:10px;cursor:pointer}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  label{color:var(--muted);font-size:13px}
+  .hint{color:var(--muted);font-size:12px;margin-top:6px}
+  canvas{width:100%;height:420px;background:#0b111d;border-radius:12px;border:1px solid #1a2638}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1728;border:1px solid #24314a;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{border-bottom:1px solid #1e2a3e;padding:6px 8px;text-align:left}
+  th{color:#c8d7ea;font-weight:600;background:#0e1422;position:sticky;top:0}
+  .footer{margin-top:12px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Margin &amp; NAV Analyzer (Offline)</h1>
+    <div class="card">
+      <div class="row">
+        <input type="file" id="file" accept=".csv,text/csv" />
+        <button id="demoBtn">Try with sample (your CSV stays local)</button>
+        <a id="dlSummary" class="btn" download="margin_percent_timeseries.csv">Download Series CSV</a>
+        <a id="dlDrawdowns" class="btn" download="drawdown_periods.csv">Download Drawdowns CSV</a>
+        <a id="dlStacked" class="btn" download="margin_percent_by_strategy.csv">Download Strategy % CSV</a>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>Resample</label>
+        <select id="aggPeriod">
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly (end of week)</option>
+          <option value="monthly">Monthly (end of month)</option>
+        </select>
+        <label>Drawdown min length (days)</label>
+        <input type="number" id="ddDays" value="7" min="1" step="1" style="width:90px"/>
+        <button id="applyBtn">Apply</button>
+      </div>
+      <div class="hint">Runs entirely in your browser. Expected columns: <em>Strategy</em>, <em>Date/Time Opened</em>, <em>Date/Time Closed</em>, <em>Margin Req.</em>, <em>Funds at Close</em>.</div>
+    </div>
+
+    <div class="card">
+      <label>Margin % of NAV with NAV overlay (right axis). Drawdowns shaded.</label>
+      <canvas id="chartMain" width="1100" height="420"></canvas>
+      <div class="row" style="margin-top:8px">
+        <a id="saveMain" class="btn" download="margin_nav_overlay_drawdowns.png">Save PNG</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Margin % of NAV by Strategy (stacked bars; Top 8 + “Other”).</label>
+      <canvas id="chartStack" width="1100" height="420"></canvas>
+      <div class="row" style="margin-top:8px">
+        <a id="saveStack" class="btn" download="margin_percent_stacked_by_strategy.png">Save PNG</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Drawdowns</label>
+      <div id="ddContainer" class="hint">No data yet.</div>
+    </div>
+
+    <div class="footer">Tip: Use “Resample” to switch to end-of-week/month views. Downloads reflect the current view.</div>
+  </div>
+
+<script>
+// ---------- CSV + parsing helpers ----------
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, field = '', row = [], inQuotes = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i += 2; continue; }
+        inQuotes = false; i++; continue;
+      } else { field += c; i++; continue; }
+    } else {
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      if (c === '\r') { if (text[i+1] === '\n') { i++; } row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      field += c; i++; continue;
+    }
+  }
+  row.push(field); rows.push(row);
+  while (rows.length && rows[rows.length-1].length === 1 && rows[rows.length-1][0].trim() === '') rows.pop();
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).map(r => {
+    const o = {}; headers.forEach((h, idx) => o[h] = (idx < r.length ? r[idx] : '')); return o;
+  });
+}
+function normalize(s){ return (s||'').toString().toLowerCase().replace(/\s+/g,'').replace(/[\.\-_/@%()]+/g,'').replace(/[^a-z0-9]/g,''); }
+function pickColumn(headers, candidates){
+  const map = new Map(headers.map(h => [normalize(h), h]));
+  for (const cand of candidates) if (map.has(normalize(cand))) return map.get(normalize(cand));
+  for (const h of headers) for (const cand of candidates) if (normalize(h).includes(normalize(cand))) return h;
+  return null;
+}
+function parseNumber(s){ const t = String(s??'').replace(/[^0-9\.\-]/g, ''); const v = parseFloat(t); return isFinite(v)?v:NaN; }
+function parseTimeHM(s, def){ s=(s||'').trim(); if(!s) s=def||'00:00'; const m=s.match(/^(\d{1,2})(?::(\d{2}))?\s*([APap][Mm])?$/); if(m){let h=+m[1],mm=+(m[2]||0);const ap=m[3]?m[3].toUpperCase():null;if(ap==='PM'&&h<12)h+=12;if(ap==='AM'&&h===12)h=0;return{h:h,m:mm};} const m24=s.match(/^(\d{1,2}):(\d{2})$/); if(m24) return {h:+m24[1],m:+m24[2]}; return {h:0,m:0}; }
+function parseDateSmart(s){ s=(s||'').trim(); if(!s) return null; let d=new Date(s); if(!isNaN(d)) return d; const mdy=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/); if(mdy){let yy=+mdy[3]; if(yy<100) yy+=2000; return new Date(yy,+mdy[1]-1,+mdy[2]); } d=new Date(Date.parse(s)); return isNaN(d)?null:d; }
+function combineDateTime(dateStr, timeStr, def){ const d=parseDateSmart(dateStr); const {h,m}=parseTimeHM(timeStr,def); if(!d) return null; return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, (def==='23:59'?59:0), 0); }
+function dkey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function formatDate(d){ return dkey(d); }
+function weekStart(d){ const dd = new Date(d); const day = (dd.getDay()+6)%7; dd.setDate(dd.getDate()-day); dd.setHours(0,0,0,0); return dd; } // Monday
+function monthStart(d){ const dd=new Date(d.getFullYear(), d.getMonth(), 1); dd.setHours(0,0,0,0); return dd; }
+
+// ---------- Drawing helpers ----------
+function fitY(data){ let mn=Infinity,mx=-Infinity; for(const v of data) if(isFinite(v)){ if(v<mn) mn=v; if(v>mx) mx=v; } if(!isFinite(mn)||!isFinite(mx)) return {min:0,max:1}; if(mn===mx){ if(mn===0) mx=1; else {mn*=0.95; mx*=1.05;} } const pad=(mx-mn)*0.1; return {min:mn-pad, max:mx+pad}; }
+function niceStep(raw){ const pow=Math.pow(10, Math.floor(Math.log10(raw))); const n=raw/pow; if(n<1.5) return 1*pow; if(n<3) return 2*pow; if(n<7) return 5*pow; return 10*pow; }
+function formatNumber(v){ if(Math.abs(v)>=1000) return Math.round(v).toLocaleString(); return (Math.abs(v)<1? v.toFixed(2): v.toFixed(1)); }
+function makeYTicks(range, rect, approx){ const {y,h}=rect; const ticks=[]; const span=range.max-range.min; const step=niceStep(span/approx); const start=Math.ceil(range.min/step)*step; for(let v=start; v<=range.max+1e-9; v+=step){ const t=(v-range.min)/(range.max-range.min); const py=y+h-t*h; ticks.push({pixel:py, label: formatNumber(v)}); } return ticks; }
+function makeXTicks(dates, rect, approx){ const {x,w}=rect; const n=dates.length; const step=Math.max(1, Math.floor(n/approx)); const ticks=[]; for(let i=0;i<n;i+=step){ const px=x+(i/(n-1))*w; const d=dates[i]; ticks.push({pixel:px, label:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}); } if(!ticks.length) ticks.push({pixel:x,label:''}); return ticks; }
+function drawAxes(ctx, rect, xTicks, yTicksLeft, yTicksRight, title){
+  const {x,y,w,h}=rect; ctx.save();
+  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--grid'); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.rect(x,y,w,h); ctx.stroke();
+  ctx.globalAlpha=.7; xTicks.forEach(t=>{ctx.beginPath(); ctx.moveTo(t.pixel,y); ctx.lineTo(t.pixel,y+h); ctx.stroke();});
+  yTicksLeft.forEach(t=>{ctx.beginPath(); ctx.moveTo(x,t.pixel); ctx.lineTo(x+w,t.pixel); ctx.stroke();});
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#cfe0f5'; ctx.font='12px system-ui,sans-serif'; ctx.textAlign='center'; xTicks.forEach(t=>ctx.fillText(t.label,t.pixel,y+h+14));
+  ctx.textAlign='right'; yTicksLeft.forEach(t=>ctx.fillText(t.label,x-6,t.pixel+4));
+  ctx.textAlign='left'; yTicksRight.forEach(t=>ctx.fillText(t.label,x+w+6,t.pixel+4));
+  if(title){ ctx.textAlign='center'; ctx.fillStyle='#e7eef7'; ctx.font='600 14px system-ui,sans-serif'; ctx.fillText(title,x+w/2,y-10); }
+  ctx.restore();
+}
+
+// ---------- Main renderers ----------
+function drawMainChart(canvasId, dates, marginPct, navSeries, ddRuns){
+  const canvas=document.getElementById(canvasId); const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+  const rect={x:60,y:30,w:canvas.width-100,h:canvas.height-70};
+  const rangeL=fitY(marginPct); const rangeR=fitY(navSeries);
+  const xTicks=makeXTicks(dates, rect, 8); const yL=makeYTicks(rangeL, rect, 6); const yR=makeYTicks(rangeR, rect, 6);
+  drawAxes(ctx, rect, xTicks, yL, yR, 'Margin % of NAV (left) with NAV (right) — drawdowns shaded');
+  const xAt=i=>rect.x+(i/(dates.length-1))*rect.w; const yLeft=v=>rect.y+rect.h-((v-rangeL.min)/(rangeL.max-rangeL.min))*rect.h; const yRight=v=>rect.y+rect.h-((v-rangeR.min)/(rangeR.max-rangeR.min))*rect.h;
+  ctx.save(); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--shade'); ddRuns.forEach(run=>{ const x1=xAt(run.start), x2=xAt(run.end); ctx.fillRect(x1, rect.y, (x2-x1), rect.h); }); ctx.restore();
+  ctx.save(); ctx.strokeStyle='#79c1ff'; ctx.lineWidth=1.5; ctx.beginPath(); for(let i=0;i<marginPct.length;i++){ const v=marginPct[i]; if(!isFinite(v)) continue; const px=xAt(i), py=yLeft(v); if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);} ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.strokeStyle='#ffd479'; ctx.lineWidth=1.2; ctx.beginPath(); for(let i=0;i<navSeries.length;i++){ const v=navSeries[i]; if(!isFinite(v)) continue; const px=xAt(i), py=yRight(v); if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);} ctx.stroke(); ctx.restore();
+}
+
+function drawStackedChart(canvasId, dates, seriesMap){
+  const canvas=document.getElementById(canvasId); const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+  const rect={x:60,y:30,w:canvas.width-40-200,h:canvas.height-60};
+  const keys=Object.keys(seriesMap); const n=dates.length; const totals=new Array(n).fill(0); keys.forEach(k=>{const arr=seriesMap[k]; for(let i=0;i<n;i++) totals[i]+= (arr[i]||0);});
+  const range=fitY(totals); const xTicks=makeXTicks(dates, rect, 8); const yTicks=makeYTicks(range, rect, 6); drawAxes(ctx, rect, xTicks, yTicks, [], 'Margin % of NAV by Strategy (stacked)');
+  const xAt=i=>rect.x+(i/(n-1))*rect.w; const y=v=>rect.y+rect.h-((v-range.min)/(range.max-range.min))*rect.h;
+  function hsl(i){ return `hsl(${(i*53)%360} 75% 60%)`; } const barW=Math.max(1, rect.w/n - 0.5);
+  const stacks=new Array(n).fill(0);
+  keys.forEach((k,ki)=>{ const arr=seriesMap[k]; ctx.fillStyle=hsl(ki); for(let i=0;i<n;i++){ const x=xAt(i)-barW/2; const y0=y(stacks[i]); const y1=y(stacks[i]+(arr[i]||0)); const h=Math.max(0, y1-y0); ctx.fillRect(x, y1, barW, h); stacks[i]+= (arr[i]||0);} });
+  // legend
+  const lx=rect.x+rect.w+20, ly=rect.y; ctx.save(); ctx.font='12px system-ui,sans-serif'; ctx.fillStyle='#cfe0f5';
+  keys.forEach((k,ki)=>{ ctx.fillStyle=`hsl(${(ki*53)%360} 75% 60%)`; ctx.fillRect(lx, ly+ki*18, 12, 12); ctx.fillStyle='#cfe0f5'; ctx.fillText(k, lx+16, ly+10+ki*18); });
+  ctx.restore();
+}
+
+// ---------- Drawdown + downloads ----------
+function computeDrawdowns(dates, navSeries, minDays){
+  const runs=[]; let peak=-Infinity, start=null, minPct=0, minIdx=null;
+  for(let i=0;i<navSeries.length;i++){
+    const v=navSeries[i];
+    if(v>peak){ if(start!==null){ const dur = Math.round((dates[i-1]-dates[start]) / 86400000) + 1; if(dur>minDays) runs.push({start:start,end:i-1,days:dur,maxDrawdownPct:minPct,minIdx:minIdx}); } peak=v; start=null; minPct=0; minIdx=null; continue; }
+    const pct=(v-peak)/peak*100;
+    if(start===null){ start=i; minPct=pct; minIdx=i; }
+    if(pct<minPct){ minPct=pct; minIdx=i; }
+  }
+  if(start!==null){ const dur=Math.round((dates[dates.length-1]-dates[start])/86400000)+1; if(dur>minDays) runs.push({start:start,end:dates.length-1,days:dur,maxDrawdownPct:minPct,minIdx:minIdx}); }
+  return runs;
+}
+function renderDDTable(containerId, dates, runs){
+  const el=document.getElementById(containerId);
+  if(!runs.length){ el.textContent='No drawdowns longer than threshold.'; return; }
+  let html='<div style="max-height:260px;overflow:auto"><table><thead><tr><th>Start</th><th>End</th><th>Duration (days)</th><th>Max Depth (%)</th><th>Max Depth Date</th></tr></thead><tbody>';
+  for(const r of runs){ html+=`<tr><td>${formatDate(dates[r.start])}</td><td>${formatDate(dates[r.end])}</td><td>${r.days}</td><td>${r.maxDrawdownPct.toFixed(2)}</td><td>${formatDate(dates[r.minIdx])}</td></tr>`; }
+  html+='</tbody></table></div>'; el.innerHTML=html;
+}
+function setDownload(id, filename, content){ const a=document.getElementById(id); const blob=new Blob([content], {type:'text/csv'}); a.href=URL.createObjectURL(blob); a.download=filename; }
+function buildDownloads(prefix, dates, marginUsed, navSeries, marginPct, seriesMap, ddRuns){
+  const dailyCSV=[['Date','Margin Used','NAV (Funds at Close, ffilled)','Margin % of NAV']].concat(
+    dates.map((d,i)=>[formatDate(d), (marginUsed?marginUsed[i].toFixed(6):''), navSeries[i].toFixed(6), marginPct[i].toFixed(6)])
+  ).map(r=>r.join(',')).join('\n');
+  const ddCSV=[['start_date','end_date','duration_days','max_drawdown_pct','max_drawdown_date']].concat(
+    ddRuns.map(r=>[formatDate(dates[r.start]), formatDate(dates[r.end]), r.days, r.maxDrawdownPct.toFixed(6), formatDate(dates[r.minIdx])])
+  ).map(r=>r.join(',')).join('\n');
+  const keys=Object.keys(seriesMap); const stackCSV=[['Date',...keys]].concat(
+    dates.map((d,i)=>[formatDate(d), ...keys.map(k=>(seriesMap[k][i]||0).toFixed(6))])
+  ).map(r=>r.join(',')).join('\n');
+  setDownload('dlSummary', `${prefix}_series.csv`, dailyCSV);
+  setDownload('dlDrawdowns', `${prefix}_drawdowns.csv`, ddCSV);
+  setDownload('dlStacked', `${prefix}_strategy.csv`, stackCSV);
+}
+
+// ---------- App state & pipeline ----------
+const APP = { raw:null, daily:null, view:null };
+
+async function handleCSVText(text){
+  APP.raw = parseCSV(text);
+  if(!APP.raw.length) throw new Error('No rows parsed from CSV.');
+  const headers=Object.keys(APP.raw[0]);
+  const colStrategy=pickColumn(headers,['Strategy']);
+  const colOpenDate=pickColumn(headers,['Date Opened','Opened Date']);
+  const colOpenTime=pickColumn(headers,['Time Opened','Opened Time']);
+  const colCloseDate=pickColumn(headers,['Date Closed','Closed Date']);
+  const colCloseTime=pickColumn(headers,['Time Closed','Closed Time']);
+  const colMargin=pickColumn(headers,['Margin Req.','Margin Req','Margin Requirement','Margin']);
+  const colFunds=pickColumn(headers,['Funds at Close','Funds @ Close','Net Asset Value','NAV']);
+  const missing=[]; if(!colOpenDate) missing.push('Date Opened'); if(!colCloseDate) missing.push('Date Closed'); if(!colMargin) missing.push('Margin Req.'); if(!colFunds) missing.push('Funds at Close');
+  if(missing.length) throw new Error('Missing expected columns: '+missing.join(', '));
+
+  // Build trades
+  let trades = APP.raw.map(r=>{
+    const open=combineDateTime(r[colOpenDate], r[colOpenTime], '00:00');
+    const close=combineDateTime(r[colCloseDate], r[colCloseTime], '23:59');
+    const margin=parseNumber(r[colMargin]);
+    const fundsClose=parseNumber(r[colFunds]);
+    const strat=(r[colStrategy]??'').toString().trim() || 'Unknown';
+    return {open, close, margin, fundsClose, strat};
+  }).filter(t=>t.open && !isNaN(t.margin));
+  let maxTs=new Date(Math.max(...trades.map(t=> (t.close? t.close.getTime(): t.open.getTime()))));
+  trades.forEach(t=>{ if(!t.close) t.close=maxTs; });
+
+  const allDates = trades.flatMap(t=>[t.open,t.close]).filter(Boolean);
+  const start=new Date(new Date(Math.min(...allDates)).setHours(0,0,0,0));
+  const end=new Date(new Date(Math.max(...allDates)).setHours(0,0,0,0));
+  const days=[]; for(let d=new Date(start); d<=end; d=new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)) days.push(new Date(d));
+  const eod=days.map(d=> new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,0));
+
+  // Events
+  const eventsOverall=[]; const eventsByStrat=new Map();
+  trades.forEach(t=>{
+    eventsOverall.push({ts:t.open, change:+t.margin}); eventsOverall.push({ts:t.close, change:-t.margin});
+    if(!eventsByStrat.has(t.strat)) eventsByStrat.set(t.strat, []);
+    eventsByStrat.get(t.strat).push({ts:t.open, change:+t.margin}); eventsByStrat.get(t.strat).push({ts:t.close, change:-t.margin});
+  });
+  function prepareEvents(evts){ evts=evts.filter(e=>e.ts).sort((a,b)=>a.ts-b.ts); const combo=[]; for(const e of evts){ if(combo.length && combo[combo.length-1].ts.getTime()===e.ts.getTime()) combo[combo.length-1].change += e.change; else combo.push({ts:new Date(e.ts), change:e.change}); } return combo; }
+  const evOverall=prepareEvents(eventsOverall);
+  const evByStrat=new Map([...eventsByStrat.entries()].map(([k,v])=>[k, prepareEvents(v)]));
+  function runningAtEOD(evts){ const res=new Array(eod.length).fill(0); let run=0,j=0; for(let i=0;i<eod.length;i++){ const t=eod[i]; while(j<evts.length && evts[j].ts<=t){ run+=evts[j].change; j++; } res[i]=run; } return res; }
+  const dailyMargin = runningAtEOD(evOverall);
+
+  // NAV (ffill then backfill)
+  const navPts = trades.filter(t=>!isNaN(t.fundsClose) && t.close).map(t=>({ts:t.close, nav:t.fundsClose})).sort((a,b)=>a.ts-b.ts);
+  let k=0, curNav=NaN; const navSeries=new Array(eod.length).fill(NaN);
+  for(let i=0;i<eod.length;i++){ const cutoff=eod[i].getTime(); while(k<navPts.length && navPts[k].ts.getTime()<=cutoff){ curNav=navPts[k].nav; k++; } navSeries[i]=curNav; }
+  let first = navSeries.findIndex(v=>!isNaN(v)); if(first===-1) throw new Error('No usable "Funds at Close" values found.'); for(let i=0;i<first;i++) navSeries[i]=navSeries[first];
+  const marginPct = dailyMargin.map((m,i)=> m / navSeries[i] * 100);
+
+  // Strategy-level
+  const stratKeys=[...evByStrat.keys()];
+  const dailyByStrat={}; stratKeys.forEach(k=> dailyByStrat[k]=runningAtEOD(evByStrat.get(k)));
+  const pctByStrat={}; stratKeys.forEach(k=> pctByStrat[k]= dailyByStrat[k].map((m,i)=> m / navSeries[i] * 100));
+
+  // Rank strategies by mean contribution and keep top 8 + Other
+  const means=stratKeys.map(k=>[k, pctByStrat[k].reduce((a,b)=>a+b,0)/pctByStrat[k].length]).sort((a,b)=>b[1]-a[1]);
+  const keep=means.slice(0,8).map(x=>x[0]); const other=stratKeys.filter(k=>!keep.includes(k));
+  const pctTop={}; keep.forEach(k=> pctTop[k]=pctByStrat[k].slice());
+  if(other.length){ const otherArr=new Array(eod.length).fill(0); other.forEach(k=>{ pctByStrat[k].forEach((v,i)=> otherArr[i]+= (v||0)); }); pctTop['Other']=otherArr; }
+
+  APP.daily = { days, eod, margin: dailyMargin, nav: navSeries, marginPct, seriesMap: pctTop };
+  applyView();
+}
+
+function resampleEndOfPeriod(dates, arrays, period){
+  if(period==='daily'){ return {dates: dates.slice(), arrays: arrays.map(a=>a.slice())}; }
+  const keyFn = (period==='weekly') ? weekStart : monthStart;
+  const idxByKey = new Map(); // key string -> last index in that period
+  for(let i=0;i<dates.length;i++){
+    const k = (period==='weekly' ? weekStart(dates[i]) : monthStart(dates[i])).getTime();
+    idxByKey.set(k, i); // keep last
+  }
+  const keys = Array.from(idxByKey.keys()).sort((a,b)=>a-b);
+  const outDates = keys.map(t=> new Date(+t));
+  const outIdxs  = keys.map(k=> idxByKey.get(k));
+  const outArrays = arrays.map(arr => outIdxs.map(i => arr[i]));
+  return {dates: outDates, arrays: outArrays};
+}
+
+function applyView(){
+  if(!APP.daily) return;
+  const period = document.getElementById('aggPeriod').value;
+  const ddDays = Math.max(1, parseInt(document.getElementById('ddDays').value, 10)||7);
+
+  // Build arrays list in fixed order: margin, nav, marginPct, ...seriesMap
+  const seriesMap = APP.daily.seriesMap;
+  const stratKeys = Object.keys(seriesMap);
+  const arrays = [APP.daily.margin, APP.daily.nav, APP.daily.marginPct, ...stratKeys.map(k=>seriesMap[k])];
+  const res = resampleEndOfPeriod(APP.daily.days, arrays, period);
+  const dates = res.dates;
+  const [marginUsed, nav, marginPct, ...stratArrays] = res.arrays;
+
+  const stratMap = {}; stratKeys.forEach((k,i)=> stratMap[k]=stratArrays[i]);
+
+  const ddRuns = computeDrawdowns(dates, nav, ddDays);
+  drawMainChart('chartMain', dates, marginPct, nav, ddRuns);
+  drawStackedChart('chartStack', dates, stratMap);
+  renderDDTable('ddContainer', dates, ddRuns);
+
+  const prefix = (period==='daily'?'daily':(period==='weekly'?'weekly_eow':'monthly_eom'));
+  buildDownloads(prefix, dates, marginUsed, nav, marginPct, stratMap, ddRuns);
+}
+
+// ---------- Wire up UI ----------
+const fileInput=document.getElementById('file');
+fileInput.addEventListener('change', async (e)=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const txt=await f.text(); await handleCSVText(txt).catch(err=>alert(err.message||String(err))); });
+document.getElementById('demoBtn').addEventListener('click', async ()=>{
+  const sample=`Strategy,Date Opened,Time Opened,Date Closed,Time Closed,Margin Req.,Funds at Close
+Sample A,2025-01-02,09:35,2025-01-10,16:00,$2000,100000
+Sample B,2025-01-06,10:00,2025-01-18,16:00,$1500,101250
+Sample B,2025-01-20,10:00,2025-01-25,16:00,$1500,102000
+Sample A,2025-01-26,09:35,2025-02-02,16:00,$2000,100500`;
+  await handleCSVText(sample).catch(err=>alert(err.message||String(err)));
+});
+document.getElementById('applyBtn').addEventListener('click', applyView);
+function connectSave(id, canvasId){ const a=document.getElementById(id); const c=document.getElementById(canvasId); a.addEventListener('click', ()=>{ a.href=c.toDataURL('image/png'); }); }
+connectSave('saveMain','chartMain'); connectSave('saveStack','chartStack');
+
+</script>
+</body>
+</html>
