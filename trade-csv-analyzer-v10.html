@@ -1,0 +1,740 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Single-File Trade CSV Analyzer</title>
+  <style>
+    :root{
+      --bg: #0b0e14;
+      --panel: #121826;
+      --muted: #8892a6;
+      --text: #e6e6e6;
+      --accent: #7c9bff;
+      --accent-2: #3dd68c;
+      --border: #23314f;
+      --card: #151b2b;
+      --warn: #ffb16a;
+      --bad: #ff6b6b;
+      --good: #35d07f;
+    }
+    @media (prefers-color-scheme: light) {
+      :root{
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --muted: #475569;
+        --text: #0f172a;
+        --accent: #2748ff;
+        --accent-2: #059669;
+        --border: #e2e8f0;
+        --card: #ffffff;
+        --warn: #b45309;
+        --bad: #dc2626;
+        --good: #059669;
+      }
+    }
+    *{box-sizing: border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+    }
+    header{
+      position: sticky; top: 0; z-index: 5;
+      backdrop-filter: blur(8px);
+      background: color-mix(in oklab, var(--bg) 85%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    .container{max-width:1200px; margin:0 auto; padding:16px}
+    h1{margin:0; font-size: clamp(18px,3vw,28px); letter-spacing: .3px}
+    .subtitle{color: var(--muted); font-size: 12px}
+    .grid{display:grid; gap:16px}
+    .grid-3{grid-template-columns: 1fr}
+    @media (min-width: 960px){ .grid-3{grid-template-columns: 1fr 1fr 1.2fr} }
+    .card{
+      background: var(--panel);
+      border:1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 14px 12px;
+      box-shadow: 0 6px 32px color-mix(in oklab, #000 30%, transparent);
+      min-height: 160px;
+    }
+    .card h2{margin: 0 0 8px; font-size: 16px}
+    .muted{color: var(--muted)}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap: wrap}
+    .pill{border:1px solid var(--border); border-radius:999px; padding:6px 10px; font-size:12px}
+    .upload-zone{
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap: 10px; text-align:center; min-height: 120px; cursor: pointer;
+      background: color-mix(in oklab, var(--panel) 90%, transparent);
+    }
+    .upload-zone.drag{ background: color-mix(in oklab, var(--accent) 10%, var(--panel)); border-color: var(--accent); }
+    button,.btn{
+      appearance: none; border:1px solid var(--border); background: var(--card);
+      color: var(--text); padding: 8px 12px; border-radius: 12px; cursor: pointer;
+      font-weight: 600; letter-spacing:.2px;
+    }
+    button.primary{ background: var(--accent); border-color: color-mix(in oklab, var(--accent) 60%, var(--border)); color: white }
+    button.ghost{ background: transparent }
+    .stat{display:grid; gap:6px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; min-width: 140px}
+    .stat .k{font-size:12px; color: var(--muted)}
+    .stat .v{font-size:18px; font-weight:700}
+    table{ width:100%; border-collapse: collapse; font-size: 13px}
+    thead th{ text-align:left; color: var(--muted); font-weight:600; border-bottom:1px solid var(--border); padding:8px 6px }
+    tbody td{ padding:8px 6px; border-bottom: 1px dashed var(--border)}
+    tbody tr:hover{ background: color-mix(in oklab, var(--panel) 85%, transparent) }
+    .table-wrap{ overflow:auto; border:1px solid var(--border); border-radius: 12px }
+    .legend{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 4px }
+    .legend .item{ display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--border)}
+    .dot{width:10px; height:10px; border-radius:999px; background: var(--muted); display:inline-block}
+    .chart-wrap{ position:relative; border:1px solid var(--border); border-radius: 12px; padding:6px; background: var(--card) }
+    svg{ width:100%; height: 420px; display:block }
+    .axis text{ fill: var(--muted); font-size: 11px }
+    .axis path,.axis line{ stroke: var(--border) }
+    .tooltip{ position:absolute; pointer-events:none; background: var(--panel); border:1px solid var(--border); padding:8px 10px; border-radius:10px; font-size:12px; display:none; min-width: 180px }
+    .tip-row{ display:flex; justify-content:space-between; gap:10px }
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px}
+    .help{font-size:12px; color: var(--muted)}
+    .controls{ display:flex; gap:8px; align-items:center; flex-wrap: wrap; margin-bottom: 8px }
+    .spacer{ flex:1 }
+    .note{ font-size:12px; color: var(--muted) }
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+  
+    /* v7: sort buttons in table headers */
+    .sort {
+      margin-left:6px; padding:0 6px; line-height:1; height:18px; min-width:18px;
+      border:1px solid var(--border); background: transparent; color: var(--muted);
+      border-radius:6px; cursor:pointer; font-size:11px;
+    }
+    .sort.active{ color: var(--text); border-color: var(--accent); }
+    .sort:hover{ color: var(--text); }
+    </style>
+    
+
+<style id="v5-overrides">
+  /* v5 layout overrides: force a single column, full-width panels */
+  .grid, .grid-3 { display:block !important; }
+  .grid-3 > * { width:100% !important; }
+  .card { width:100% !important; }
+  /* Guard against any media-query grid rules */
+  @media (min-width: 0px) {
+    .grid-3 { display:block !important; }
+    .grid-3 > * { width:100% !important; }
+  }
+
+    /* v7: sort buttons in table headers */
+    .sort {
+      margin-left:6px; padding:0 6px; line-height:1; height:18px; min-width:18px;
+      border:1px solid var(--border); background: transparent; color: var(--muted);
+      border-radius:6px; cursor:pointer; font-size:11px;
+    }
+    .sort.active{ color: var(--text); border-color: var(--accent); }
+    .sort:hover{ color: var(--text); }
+    </style>
+    
+
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="row">
+        <h1>Trade CSV Analyzer v10</h1>
+        <span class="spacer"></span>
+        <span class="pill">No installs • Works offline</span>
+      </div>
+      <div class="subtitle">Drop in a CSV of trades and get instant strategy stats and charts. Built with modern, framework‑free Web APIs.</div>
+    </div>
+  </header>
+
+  <main class="container" style="padding-top:12px">
+    <section class="grid grid-3">
+      <!-- Panel 1 -->
+      <div class="card" id="panel1">
+        <h2>1) Upload & Summary</h2>
+        <label class="upload-zone" id="dropzone" for="file">
+          <input id="file" class="sr-only" type="file" accept=".csv,text/csv" />
+          <div>
+            <div style="font-weight:700; font-size:16px">Click to choose a CSV or drag & drop</div>
+            <div class="muted" style="font-size:12px; margin-top:4px">We never upload your data anywhere—parses locally in your browser.</div>
+          </div>
+          <div class="row">
+            <button class="primary">Select CSV</button>
+            <span class="kbd">.csv</span>
+          </div>
+        </label>
+
+        <div id="summary" style="margin-top:12px; display:none">
+          <div class="row" style="gap:10px; flex-wrap:wrap">
+            <div class="stat">
+              <div class="k">File</div>
+              <div class="v" id="summary-file">—</div>
+            </div>
+            <div class="stat">
+              <div class="k">Rows</div>
+              <div class="v" id="summary-rows">—</div>
+            </div>
+            <div class="stat">
+              <div class="k">Strategies</div>
+              <div class="v" id="summary-strategies">—</div>
+            </div>
+            <div class="stat">
+              <div class="k">Date Range</div>
+              <div class="v" id="summary-dates">—</div>
+            </div>
+          </div>
+          <p class="help" style="margin:10px 2px 0">
+            <strong>Assumptions:</strong> Daily returns per strategy are computed by grouping trade P/L on each close date and dividing by total margin closed that day. Sharpe is annualized (sqrt(252)). Calmar is CAGR / max drawdown on the daily equity curve. Max consecutive losses = longest streak of losing trades by close date.
+          </p>
+        </div>
+      </div>
+
+      <!-- Panel 2 -->
+      <div class="card" id="panel2">
+        <h2>2) Strategy Stats</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Strategy <button class="sort" data-key="name" aria-label="Sort by Strategy">▲</button></th>
+                <th>Trades <button class="sort" data-key="trades" aria-label="Sort by Trades">▲</button></th>
+                <th>Avg Margin <button class="sort" data-key="avgMargin" aria-label="Sort by Avg Margin">▲</button></th>
+                <th>Sharpe <button class="sort" data-key="sharpe" aria-label="Sort by Sharpe">▲</button></th>
+                <th>Calmar <button class="sort" data-key="calmar" aria-label="Sort by Calmar">▲</button></th>
+                <th>Cons Loss <button class="sort" data-key="maxConsecLosses" aria-label="Sort by Consecutive Losses">▲</button></th>
+                <th>Avg P&L <button class="sort" data-key="avgPnl" aria-label="Sort by Avg P&L">▲</button></th>
+                <th>Avg P&L / Avg Margin <button class="sort" data-key="ratio" aria-label="Sort by PnL to Margin">▲</button></th>
+              </tr>
+            </thead>
+            <tbody id="strategy-table">
+              <tr><td colspan="7" class="muted">Upload a CSV to populate…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Panel 3 -->
+      <div class="card" id="panel3">
+        <h2>3) Returns by Strategy</h2>
+        <div class="controls">
+  <div class="row" style="gap:6px">
+    <button class="btn ghost mode" data-mode="PNL">Cumulative P&L</button>
+    <button class="btn ghost mode" data-mode="RET">Cumulative Return</button>
+  </div>
+          <div class="row" style="gap:6px">
+            <button class="btn ghost tf" data-win="1M">1M</button>
+            <button class="btn ghost tf" data-win="3M">3M</button>
+            <button class="btn ghost tf" data-win="6M">6M</button>
+            <button class="btn ghost tf" data-win="YTD">YTD</button>
+            <button class="btn ghost tf" data-win="1Y">1Y</button>
+            <button class="btn ghost tf" data-win="ALL">All</button>
+          </div>
+          <span class="spacer"></span>
+          <span class="note" id="mode-note">Mode: Cumulative P&L per strategy (daily sum of P&L by close date).</span>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div class="chart-wrap">
+          <svg id="chart" role="img" aria-label="Strategy cumulative returns chart"></svg>
+          <div class="tooltip" id="tooltip"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script type="module">
+/* === Helpers ============================================================= */
+const $ = (sel, el=document) => el.querySelector(sel);
+const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+const fmtNum = (n, d=2) => isFinite(n) ? (Math.abs(n) >= 1000 ? n.toLocaleString(undefined, {maximumFractionDigits:d}) : n.toFixed(d)) : "—";
+const fmtMoney = n => isFinite(n) ? (n<0?'-':'') + '$' + Math.abs(n).toLocaleString(undefined,{maximumFractionDigits:2}) : '—';
+const fmtPct = n => isFinite(n) ? (n*100).toFixed(2) + '%' : '—';
+const parseNum = v => {
+  if (v === null || v === undefined) return NaN;
+  if (typeof v === 'number') return v;
+  if (typeof v !== 'string') return Number(v);
+  const s = v.replace(/[$,%\s]/g,'').replace(/,/g,'');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : NaN;
+};
+const parseDate = s => {
+  // Accepts YYYY-MM-DD or with time; returns Date at local midnight for daily grouping
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d)) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+const dateKey = d => d.toISOString().slice(0,10);
+
+function csvParse(text){
+  // Minimal CSV parser supporting quotes and commas/newlines inside quotes
+  const rows = [];
+  let i=0, field='', row=[], inQuotes=false;
+  while (i < text.length){
+    const ch = text[i];
+    if (inQuotes){
+      if (ch === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"'){ inQuotes = true; }
+      else if (ch === ','){ row.push(field); field=''; }
+      else if (ch === '\n' || ch === '\r'){
+        if (ch === '\r' && text[i+1] === '\n') i++; // handle CRLF
+        row.push(field); field='';
+        if (row.some(cell => cell !== '' )) rows.push(row);
+        else if (rows.length===0) rows.push(row); // keep header even if blank
+        row=[];
+      } else {
+        field += ch;
+      }
+    }
+    i++;
+  }
+  row.push(field); rows.push(row);
+  // header
+  const header = rows.shift().map(h => h.trim());
+  return rows.filter(r => r.length>1 || r.some(x=>x!=='')).map(r => {
+    const o = {};
+    header.forEach((h,idx)=> o[h] = r[idx] ?? '');
+    return o;
+  });
+}
+
+/* === Core computations =================================================== */
+function computeStats(rows){
+  // Normalize needed columns
+  const col = {
+    strategy: 'Strategy',
+    pnl: 'P/L',
+    margin: 'Margin Req.',
+    dateClosed: 'Date Closed',
+    dateOpened: 'Date Opened'
+  };
+  // Inventory
+  const strategies = new Map(); // name -> { trades: [], daily: Map(date -> {pnl, margin}) }
+  let minDate = null, maxDate = null, countRows = 0;
+  for (const r of rows){
+    const strat = (r[col.strategy] ?? 'Unknown').toString().trim() || 'Unknown';
+    const pnl = parseNum(r[col.pnl]);
+    const mrg = parseNum(r[col.margin]);
+    const dOpen = parseDate(r[col.dateOpened]);
+    const dClose = parseDate(r[col.dateClosed]);
+    if (dOpen){ minDate = !minDate ? dOpen : (dOpen < minDate ? dOpen : minDate); }
+    if (dClose){ maxDate = !maxDate ? dClose : (dClose > maxDate ? dClose : maxDate); }
+
+    if (!strategies.has(strat)){
+      strategies.set(strat, { trades: [], daily: new Map() });
+    }
+    const s = strategies.get(strat);
+    s.trades.push({date: dClose ?? dOpen, pnl, margin: mrg});
+    if (dClose){
+      const key = dateKey(dClose);
+      const cur = s.daily.get(key) || { pnl:0, margin:0 };
+      cur.pnl += (isFinite(pnl)?pnl:0);
+      cur.margin += (isFinite(mrg)?Math.max(mrg,0):0);
+      s.daily.set(key, cur);
+    }
+    countRows++;
+  }
+
+  // Build per-strategy metrics
+  const stats = [];
+  for (const [name, s] of strategies){
+    // Avg margin & avg pnl
+    const margins = s.trades.map(t => t.margin).filter(Number.isFinite);
+    const pnls = s.trades.map(t => t.pnl).filter(Number.isFinite);
+    const avgMargin = margins.length ? margins.reduce((a,b)=>a+b,0)/margins.length : NaN;
+    const avgPnl = pnls.length ? pnls.reduce((a,b)=>a+b,0)/pnls.length : NaN;
+
+    // Max consecutive losing trades (by trade order, then date)
+    const tradeSeq = s.trades.slice().sort((a,b)=> (a.date?.getTime()||0)-(b.date?.getTime()||0));
+    let maxStreak=0, curStreak=0;
+    for (const t of tradeSeq){
+      if (isFinite(t.pnl) && t.pnl < 0){ curStreak++; maxStreak = Math.max(maxStreak, curStreak); }
+      else { curStreak = 0; }
+    }
+
+    // Daily return series
+    const dailyEntries = Array.from(s.daily.entries()).sort((a,b)=> a[0].localeCompare(b[0]));
+    const daily = dailyEntries.map(([d, v]) => ({
+      date: new Date(d + 'T00:00:00'),
+      ret: (v.margin>0 && isFinite(v.pnl)) ? (v.pnl / v.margin) : 0,
+      pnl: (isFinite(v.pnl) ? v.pnl : 0)
+    }));
+
+    // Sharpe (annualized, 252 trading days)
+    const rets = daily.map(d=>d.ret).filter(x => Number.isFinite(x));
+    const mean = rets.length ? rets.reduce((a,b)=>a+b,0)/rets.length : NaN;
+    const std = rets.length>1 ? Math.sqrt(rets.map(x=>(x-mean)**2).reduce((a,b)=>a+b,0)/(rets.length-1)) : NaN;
+    const sharpe = (Number.isFinite(mean) && Number.isFinite(std) && std>0) ? (mean/std)*Math.sqrt(252) : NaN;
+
+    // Equity & Calmar
+    let equity = 1.0, peak = 1.0, maxDD = 0;
+    for (const d of daily){
+      equity *= (1 + d.ret);
+      if (equity > peak) peak = equity;
+      const dd = (peak - equity) / peak;
+      if (dd > maxDD) maxDD = dd;
+    }
+    const spanDays = (daily.length>0) ? ((daily[daily.length-1].date - daily[0].date)/86400000) : 0;
+    const years = spanDays > 0 ? (spanDays / 365.25) : NaN;
+    const cagr = (years && years>0) ? (equity ** (1/years) - 1) : NaN;
+    const calmar = (Number.isFinite(cagr) && maxDD>0) ? (cagr / maxDD) : NaN;
+
+    stats.push({
+      name,
+      trades: s.trades.length,
+      avgMargin,
+      sharpe,
+      calmar,
+      maxConsecLosses: maxStreak,
+      avgPnl,
+      ratio: (Number.isFinite(avgPnl) && Number.isFinite(avgMargin) && avgMargin!==0) ? (avgPnl/avgMargin) : NaN,
+      daily
+    });
+  }
+
+  // For chart: merged dates domain
+  let allDates = new Set();
+  for (const s of stats){
+    for (const d of s.daily){ allDates.add(d.date.getTime()); }
+  }
+  const dates = Array.from(allDates).sort((a,b)=>a-b).map(t=>new Date(t));
+  return { stats, dates, strategies: Array.from(strategies.keys()), minDate, maxDate, rowCount: countRows };
+}
+
+/* === Charting (SVG) ====================================================== */
+function hashColor(name){
+  // deterministic bright-ish color
+  let h=0; for (let i=0;i<name.length;i++){ h = (h*31 + name.charCodeAt(i))>>>0; }
+  const hue = h % 360;
+  return `hsl(${hue} 70% 55%)`;
+}
+function linePath(points, x, y){
+  if (!points.length) return '';
+  const p = [];
+  for (let i=0;i<points.length;i++){
+    const xi = x(points[i].date);
+    const yi = y(points[i].val);
+    p.push(i===0 ? `M ${xi},${yi}` : `L ${xi},${yi}`);
+  }
+  return p.join(' ');
+}
+function makeScale(domainMin, domainMax, rangeMin, rangeMax){
+  const d = (domainMax - domainMin) || 1;
+  const r = (rangeMax - rangeMin);
+  const f = x => rangeMin + ( (x - domainMin) / d ) * r;
+  f.invert = y => domainMin + ( (y - rangeMin) / r ) * d;
+  return f;
+}
+function ticks(domainMin, domainMax, count=6){
+  const span = domainMax - domainMin;
+  if (!isFinite(span) || span<=0) return [domainMin, domainMax];
+  const step = Math.pow(10, Math.floor(Math.log10(span / count)));
+  const err = (count*step) / span;
+  const mult = err <= 0.15 ? 10 : err <= 0.35 ? 5 : err <= 0.75 ? 2 : 1;
+  const tickStep = step * mult;
+  const start = Math.ceil(domainMin / tickStep) * tickStep;
+  const ticksArr = [];
+  for (let v=start; v<=domainMax; v += tickStep) ticksArr.push(v);
+  return ticksArr;
+}
+
+function drawChart(model, windowKey='ALL'){ /* v10: toggle between cumulative P&L and cumulative return */
+  const svg = $("#chart");
+  svg.innerHTML = '';
+  const padding = {l:46, r:16, t:12, b:28};
+
+  // Timeframe window
+  const now = model.maxDate || new Date();
+  let from;
+  const yearStart = new Date(now.getFullYear(),0,1);
+  if (windowKey==='1M') from = new Date(now.getFullYear(), now.getMonth()-1, now.getDate());
+  else if (windowKey==='3M') from = new Date(now.getFullYear(), now.getMonth()-3, now.getDate());
+  else if (windowKey==='6M') from = new Date(now.getFullYear(), now.getMonth()-6, now.getDate());
+  else if (windowKey==='YTD') from = yearStart;
+  else if (windowKey==='1Y') from = new Date(now.getFullYear()-1, now.getMonth(), now.getDate());
+  else from = model.minDate || new Date();
+
+  // Build aligned series per strategy based on selected mode
+  const visible = new Set(model.visibleStrategies || model.stats.map(s=>s.name));
+  const series = [];
+  const domainDates = model.dates.filter(d => d >= from && d <= now);
+  for (const s of model.stats){
+    if (!visible.has(s.name)) continue;
+    // Build daily P&L map for quick lookup
+    const pnlByDay = new Map(s.daily.map(d => [dateKey(d.date), d.pnl ?? 0]));
+    let cum = 0.0;
+    const points = [];
+    for (const d of domainDates){
+      const p = pnlByDay.get(dateKey(d)) ?? 0;
+      cum += p;
+      points.push({date: d, val: cum});
+    }
+    series.push({ name: s.name, points });
+  }
+
+  if (domainDates.length===0 || series.length===0){
+    svg.innerHTML = `<g transform="translate(16,24)"><text fill="var(--muted)">No data in selected window.</text></g>`;
+    return;
+  }
+
+  const w = svg.clientWidth || 800;
+  const h = svg.clientHeight || 420;
+  const innerW = w - padding.l - padding.r;
+  const innerH = h - padding.t - padding.b;
+
+  const x = makeScale(domainDates[0].getTime(), domainDates[domainDates.length-1].getTime(), padding.l, padding.l + innerW);
+  const yMin = Math.min(...series.flatMap(s => s.points.map(p => p.val)));
+  const yMax = Math.max(...series.flatMap(s => s.points.map(p => p.val)));
+  const y = makeScale(yMin, yMax, padding.t + innerH, padding.t);
+
+  // Axes
+  const gAxes = document.createElementNS("http://www.w3.org/2000/svg","g");
+  gAxes.setAttribute("class","axis");
+  // Y ticks
+  const yTicks = ticks(yMin, yMax, 6);
+  for (const v of yTicks){
+    const yy = y(v);
+    const grid = document.createElementNS(svg.namespaceURI,"line");
+    grid.setAttribute("x1", padding.l); grid.setAttribute("x2", padding.l+innerW);
+    grid.setAttribute("y1", yy); grid.setAttribute("y2", yy);
+    grid.setAttribute("stroke", getComputedStyle(document.documentElement).getPropertyValue('--border').trim());
+    grid.setAttribute("stroke-width","1");
+    gAxes.appendChild(grid);
+
+    const lbl = document.createElementNS(svg.namespaceURI,"text");
+    lbl.setAttribute("x", padding.l - 8);
+    lbl.setAttribute("y", yy + 4);
+    lbl.setAttribute("text-anchor","end");
+    lbl.textContent = ((model.chartMode || 'PNL')==='PNL') ? fmtMoney(v) : fmtNum(v,3);
+    gAxes.appendChild(lbl);
+  }
+  // X ticks (monthly)
+  const months = [];
+  let cursor = new Date(domainDates[0].getFullYear(), domainDates[0].getMonth(), 1);
+  while (cursor <= domainDates[domainDates.length-1]) {
+    months.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth()+1);
+  }
+  for (const d of months){
+    const xx = x(d.getTime());
+    const grid = document.createElementNS(svg.namespaceURI,"line");
+    grid.setAttribute("x1", xx); grid.setAttribute("x2", xx);
+    grid.setAttribute("y1", padding.t); grid.setAttribute("y2", padding.t+innerH);
+    grid.setAttribute("stroke", getComputedStyle(document.documentElement).getPropertyValue('--border').trim());
+    grid.setAttribute("stroke-width","1");
+    gAxes.appendChild(grid);
+
+    const lbl = document.createElementNS(svg.namespaceURI,"text");
+    lbl.setAttribute("x", xx);
+    lbl.setAttribute("y", padding.t + innerH + 18);
+    lbl.setAttribute("text-anchor","middle");
+    lbl.textContent = d.toLocaleDateString(undefined, {month:'short', year: '2-digit'});
+    gAxes.appendChild(lbl);
+  }
+  svg.appendChild(gAxes);
+
+  // Lines
+  for (const s of series){
+    const path = document.createElementNS(svg.namespaceURI,"path");
+    path.setAttribute("fill","none");
+    path.setAttribute("stroke", hashColor(s.name));
+    path.setAttribute("stroke-width","2");
+    path.setAttribute("d", linePath(s.points, d=>x(d.getTime()), v=>y(v)));
+    path.setAttribute("data-name", s.name);
+    svg.appendChild(path);
+  }
+
+  // Hover
+  const tip = $("#tooltip");
+  const overlay = document.createElementNS(svg.namespaceURI,"rect");
+  overlay.setAttribute("x", padding.l); overlay.setAttribute("y", padding.t);
+  overlay.setAttribute("width", innerW); overlay.setAttribute("height", innerH);
+  overlay.setAttribute("fill","transparent");
+  svg.appendChild(overlay);
+
+  overlay.addEventListener("mousemove", (e)=>{
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const t = x.invert(loc.x);
+    // find nearest date index
+    let idx = 0, best = Infinity;
+    for (let i=0;i<domainDates.length;i++){
+      const diff = Math.abs(domainDates[i].getTime() - t);
+      if (diff < best){ best = diff; idx = i; }
+    }
+    const xDate = domainDates[idx];
+    let html = `<div class='muted' style='margin-bottom:6px'>${xDate.toLocaleDateString()}</div>`;
+    for (const s of series){
+      const p = s.points[idx];
+      if (!p) continue;
+      html += `<div class=\"tip-row\"><span><span class=\"dot\" style=\"background:${hashColor(s.name)}\"></span> ${s.name}</span><strong>${fmtMoney(p.val)}</strong></div>`;
+    }
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    tip.style.left = Math.min(e.offsetX + 24, svg.clientWidth - 200) + 'px';
+    tip.style.top  = Math.max(e.offsetY - 10, 0) + 'px';
+  });
+  overlay.addEventListener("mouseleave", ()=> tip.style.display='none');
+}
+
+function renderTable(stats){
+  const tbody = $("#strategy-table");
+  if (!stats.length){
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">No strategies found.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = stats.map(s => `
+    <tr>
+      <td>${s.name}</td>
+      <td>${s.trades}</td>
+      <td>${fmtMoney(s.avgMargin)}</td>
+      <td>${Number.isFinite(s.sharpe) ? fmtNum(s.sharpe,2) : '—'}</td>
+      <td>${Number.isFinite(s.calmar) ? fmtNum(s.calmar,2) : '—'}</td>
+      <td>${s.maxConsecLosses}</td>
+      <td>${fmtMoney(s.avgPnl)}</td>
+      <td>${(Number.isFinite(s.avgPnl) && Number.isFinite(s.avgMargin) && s.avgMargin!==0) ? fmtNum(s.avgPnl/s.avgMargin,3) : '—'}</td>
+    </tr>
+  `).join("");
+}
+
+function applySort(model){
+  const key = model.sortKey || 'name';
+  const dir = model.sortDir || 'asc';
+  const arr = model.stats.slice();
+  arr.sort((a,b)=>{
+    const va = a[key], vb = b[key];
+    if (key==='name'){ // string compare
+      return dir==='asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    }
+    const na = Number.isFinite(va) ? va : -Infinity;
+    const nb = Number.isFinite(vb) ? vb : -Infinity;
+    return dir==='asc' ? (na-nb) : (nb-na);
+  });
+  return arr;
+}
+
+function initSortUI(model){
+  const table = document.querySelector('#strategy-table').closest('table');
+  const btns = table.querySelectorAll('thead .sort');
+  btns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.getAttribute('data-key');
+      if (model.sortKey === key){
+        model.sortDir = (model.sortDir === 'asc') ? 'desc' : 'asc';
+      } else {
+        model.sortKey = key; model.sortDir = 'asc';
+      }
+      // update button indicators
+      btns.forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      btn.textContent = (model.sortDir==='asc') ? '▲' : '▼';
+      // reset others to default triangle
+      btns.forEach(b=> { if (b!==btn) b.textContent='▲'; });
+      // re-render with new sort
+      renderTable(applySort(model));
+    });
+  });
+}
+
+function renderLegend(stats, model){
+  const legend = $("#legend");
+  legend.innerHTML = stats.map(s => {
+    const color = hashColor(s.name);
+    const checked = (model.visibleStrategies ? model.visibleStrategies.includes(s.name) : true);
+    return `<label class="item"><input type="checkbox" data-strategy="${s.name}" ${checked?'checked':''}/> <span class="dot" style="background:${color}"></span> ${s.name}</label>`;
+  }).join("");
+  legend.addEventListener('change', () => {
+    model.visibleStrategies = $$("#legend input:checked").map(i => i.getAttribute('data-strategy'));
+    drawChart(model, model.windowKey || 'ALL');
+  });
+}
+
+/* === File handling & boot =============================================== */
+const dropzone = $("#dropzone");
+const fileInput = $("#file");
+
+function handleFiles(file){
+  if (!file) return;
+  file.arrayBuffer().then(buf => {
+    const text = new TextDecoder().decode(buf);
+    let rows;
+    try {
+      rows = csvParse(text);
+    } catch(err){
+      alert("CSV parse error: " + err.message);
+      return;
+    }
+    if (!rows || !rows.length){ alert("No rows found in CSV."); return; }
+    const model = computeStats(rows);
+    model.sortKey = model.sortKey || 'name';
+    model.sortDir = model.sortDir || 'asc';
+    // Summary
+    $("#summary").style.display = 'block';
+    $("#summary-file").textContent = file.name;
+    $("#summary-rows").textContent = model.rowCount.toLocaleString();
+    $("#summary-strategies").textContent = model.stats.length.toLocaleString();
+    const min = model.minDate ? model.minDate.toISOString().slice(0,10) : '—';
+    const max = model.maxDate ? model.maxDate.toISOString().slice(0,10) : '—';
+    $("#summary-dates").textContent = `${min} → ${max}`;
+
+    // Table & legend & chart
+    renderTable(applySort(model));
+    renderLegend(model.stats, model);
+    initSortUI(model);
+    model.windowKey = 'ALL';
+    drawChart(model, 'ALL');
+
+    // timeframe controls
+    $$(".tf").forEach(btn => btn.addEventListener('click', () => {
+      model.windowKey = btn.dataset.win;
+      drawChart(model, btn.dataset.win);
+      $$(".tf").forEach(b=>b.classList.remove('primary'));
+      btn.classList.add('primary');
+    }));
+    // mark ALL as active
+    $$(".tf").find(b => b.dataset.win==='ALL')?.classList.add('primary');
+
+    // mode buttons
+    const modeBtns = $$('.mode');
+    const noteEl = $('#mode-note');
+    function updateNote(){
+      if ((model.chartMode||'PNL')==='PNL') noteEl.textContent = 'Mode: Cumulative P&L per strategy (daily sum of P&L by close date).';
+      else noteEl.textContent = 'Mode: Cumulative Return per strategy (daily sum of P&L / sum of Margin by close date; starts at 1.0).';
+    }
+    model.chartMode = model.chartMode || 'PNL';
+    updateNote();
+    modeBtns.forEach(btn => btn.addEventListener('click', ()=>{
+      model.chartMode = btn.dataset.mode;
+      modeBtns.forEach(b=>b.classList.remove('primary'));
+      btn.classList.add('primary');
+      drawChart(model, model.windowKey || 'ALL');
+      updateNote();
+    }));
+    // set default active
+    modeBtns.find(b=>b.dataset.mode==='PNL')?.classList.add('primary');
+  });
+}
+
+dropzone.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', e => handleFiles(e.target.files[0]));
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const file = e.dataTransfer.files?.[0];
+  handleFiles(file);
+});
+</script>
+</body>
+</html>
