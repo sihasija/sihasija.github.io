@@ -1,54 +1,490 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OO Tools</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dynamic Index of HTML Files</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #007BFF, #00C6FF);
-      color: white;
+    :root {
+      --bg: #0b1020;
+      --panel: #131a33;
+      --muted: #8fa1ff;
+      --text: #e8edff;
+      --sub: #b9c3ff;
+      --accent: #6aa2ff;
+      --accent-2: #9cffdb;
+      --danger: #ff7b7b;
+      --ok: #58d38b;
+      --chip: #1b2447;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: radial-gradient(1200px 600px at 20% -10%, #18224b 0%, #0b1020 50%);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      min-height: 100%;
+    }
+    header {
+      padding: 28px 20px 0;
       text-align: center;
     }
     h1 {
-      font-size: 2.5em;
-      margin-bottom: 40px;
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.4px;
     }
-    .button-link {
-      display: inline-block;
-      margin: 10px;
-      padding: 15px 30px;
-      font-size: 1.2em;
+    .sub {
+      margin-top: 6px;
+      color: var(--sub);
+      font-size: 14px;
+    }
+    main {
+      max-width: 980px;
+      margin: 22px auto 60px;
+      padding: 0 16px;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), transparent 50%) border-box,
+                  linear-gradient(180deg, transparent, rgba(255,255,255,.06) 80%) padding-box,
+                  var(--panel);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 16px;
+    }
+    @media (min-width: 720px) {
+      .controls {
+        grid-template-columns: 1fr auto auto auto;
+        align-items: center;
+      }
+    }
+    .row {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    }
+    .btn {
+      appearance: none;
+      background: linear-gradient(180deg, #3a57ff, #2b41c3);
       color: white;
-      background-color: rgba(0, 0, 0, 0.3);
-      border-radius: 8px;
-      text-decoration: none;
-      transition: background-color 0.3s ease;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.25);
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: .2px;
+      box-shadow: 0 6px 18px rgba(61,85,255,.35);
+      transition: transform .06s ease, filter .15s ease, box-shadow .15s ease;
+      white-space: nowrap;
     }
-    .button-link:hover {
-      background-color: rgba(0, 0, 0, 0.6);
+    .btn:hover { filter: brightness(1.06); box-shadow: 0 10px 24px rgba(61,85,255,.45); }
+    .btn:active { transform: translateY(1px) scale(.99); }
+    .btn.secondary {
+      background: linear-gradient(180deg, #1a244d, #151c39);
+      color: var(--sub);
+      border-color: rgba(255,255,255,.14);
+      box-shadow: 0 6px 18px rgba(0,0,0,.25);
     }
-    .links {
+    .btn.ok {
+      background: linear-gradient(180deg, #2fb877, #13814f);
+      box-shadow: 0 6px 18px rgba(47,184,119,.35);
+    }
+    .btn.danger {
+      background: linear-gradient(180deg, #ff5252, #b53b3b);
+      box-shadow: 0 6px 18px rgba(255,82,82,.35);
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center; gap: 8px;
+      padding: 8px 12px;
+      background: var(--chip);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--sub);
+      white-space: nowrap;
+    }
+    .muted { color: var(--sub); }
+    .path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+    .list {
+      padding: 8px 8px 16px;
+    }
+    .list-inner {
+      display: grid;
+      grid-template-columns: repeat(1, minmax(0,1fr));
+      gap: 10px;
+    }
+    @media (min-width: 680px) {
+      .list-inner {
+        grid-template-columns: repeat(2, minmax(0,1fr));
+      }
+    }
+    @media (min-width: 980px) {
+      .list-inner {
+        grid-template-columns: repeat(3, minmax(0,1fr));
+      }
+    }
+    .item {
       display: flex;
-      flex-direction: column;
-      gap: 15px;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      transition: transform .06s ease, background .2s ease, border-color .2s ease;
     }
+    .item:hover { transform: translateY(-1px); background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.14); }
+    .item .name {
+      font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .grow { flex: 1; min-width: 0; }
+    .open {
+      text-decoration: none;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      color: var(--text);
+      background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.03));
+      font-weight: 600;
+    }
+    .open:hover { border-color: rgba(255,255,255,.28); }
+    .search {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 12px;
+      padding: 8px 12px;
+    }
+    .search input {
+      flex: 1; min-width: 140px;
+      background: transparent; border: 0; outline: none; color: var(--text);
+      font-size: 14px;
+    }
+    .footer {
+      text-align: center; color: var(--sub); font-size: 12px; padding: 16px;
+    }
+    .hint {
+      margin: 12px 16px 0; color: var(--sub); font-size: 13px;
+    }
+    .dropzone {
+      margin: 8px 16px 0;
+      padding: 14px;
+      border: 2px dashed rgba(255,255,255,.18);
+      border-radius: 14px;
+      background: rgba(255,255,255,.03);
+      color: var(--sub);
+      text-align: center;
+    }
+    .dropzone.dragover {
+      border-color: var(--accent-2);
+      background: rgba(156,255,219,.08);
+      color: var(--text);
+    }
+    .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <h1>OO Tools</h1>
-  <div class="links">
-    <a href="Strategy-Analyzer.html" class="button-link">Strategy Analyzer</a>
-    <a href="margin_nav_analyzer_with_controls.html" class="button-link">Margin & NAV Analyzer</a>
-    <a href="trade-csv-analyzer-v10.html" class="button-link">Trade CSV Analyzer v10</a>
-  </div>
+  <header>
+    <h1>Index of HTML files</h1>
+    <div class="sub">Pick a folder, and I’ll list every <span class="muted">.html</span> file inside (excluding this index).</div>
+  </header>
+
+  <main>
+    <section class="card controls">
+      <div class="row">
+        <button class="btn" id="chooseBtn">Choose Folder</button>
+        <button class="btn secondary" id="rescanBtn" disabled>Rescan</button>
+        <label class="pill">
+          <input type="checkbox" id="autoRefresh" />
+          Auto-refresh
+        </label>
+        <span class="pill" id="countPill">0 files</span>
+      </div>
+      <div class="row">
+        <div class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 21l-4.3-4.3m2-5.7a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <input id="search" placeholder="Filter by name (e.g. 'analyzer')" />
+        </div>
+        <div class="tags">
+          <span class="pill" id="pathPill" title="Selected folder path"><strong>Folder:</strong> <span class="path" id="folderPath">None selected</span></span>
+        </div>
+      </div>
+    </section>
+
+    <p class="hint">
+      Tip: You can also drag &amp; drop files onto this page to copy them into the selected folder.
+      I’ll auto‑rescan when done.
+    </p>
+    <div class="dropzone" id="dropzone">Drop files here to add to the selected folder</div>
+
+    <section class="card list">
+      <div class="list-inner" id="list"></div>
+    </section>
+
+    <div class="footer">
+      Works best in Chromium‑based browsers (Chrome/Edge). Requires permission to access a folder (File System Access API).
+    </div>
+  </main>
+
+  <script>
+  (function() {
+    const chooseBtn = document.getElementById('chooseBtn');
+    const rescanBtn = document.getElementById('rescanBtn');
+    const listEl = document.getElementById('list');
+    const countPill = document.getElementById('countPill');
+    const pathPill = document.getElementById('folderPath');
+    const searchInput = document.getElementById('search');
+    const autoRefresh = document.getElementById('autoRefresh');
+    const dropzone = document.getElementById('dropzone');
+
+    const INDEX_NAMES = ['index.html', 'index.htm'];
+    const REFRESH_INTERVAL_MS = 4000;
+    let dirHandle = null;
+    let refreshTimer = null;
+    let lastURLs = new Map(); // name -> objectURL for cleanup
+
+    // -------- IndexedDB helpers (tiny KV) --------
+    const DB_NAME = 'dyn-index-db';
+    const STORE = 'kv';
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore(STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbGet(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const store = tx.objectStore(STORE);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbSet(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        const store = tx.objectStore(STORE);
+        const req = store.put(value, key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbDel(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        const store = tx.objectStore(STORE);
+        const req = store.delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // -------- Permissions --------
+    async function verifyPermission(handle, write) {
+      const opts = { mode: write ? 'readwrite' : 'read' };
+      // @ts-ignore
+      if (await handle.queryPermission && await handle.queryPermission(opts) === 'granted') {
+        return true;
+      }
+      // @ts-ignore
+      if (await handle.requestPermission && await handle.requestPermission(opts) === 'granted') {
+        return true;
+      }
+      return false;
+    }
+
+    function formatPathFromHandle(handle) {
+      // No direct real path; show just name and hint.
+      return handle?.name ? handle.name + ' (local folder)' : 'None selected';
+    }
+
+    function revokeURLs() {
+      for (const url of lastURLs.values()) {
+        try { URL.revokeObjectURL(url); } catch {}
+      }
+      lastURLs.clear();
+    }
+
+    async function listHtmlFiles(filter='') {
+      if (!dirHandle) return [];
+      const out = [];
+      try {
+        for await (const entry of dirHandle.values()) {
+          const handle = entry; // FileSystemHandle
+          const name = handle.name;
+          if (handle.kind === 'file' && /\.html?$/i.test(name) && !INDEX_NAMES.includes(name.toLowerCase())) {
+            if (filter && !name.toLowerCase().includes(filter.toLowerCase())) continue;
+            out.push({ name, handle });
+          }
+        }
+        out.sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      } catch (e) {
+        console.error('Error reading directory', e);
+      }
+      return out;
+    }
+
+    async function renderList() {
+      listEl.innerHTML = '';
+      revokeURLs();
+      const filter = (searchInput.value || '').trim();
+      const files = await listHtmlFiles(filter);
+      countPill.textContent = files.length + (files.length === 1 ? ' file' : ' files');
+
+      if (!files.length) {
+        const empty = document.createElement('div');
+        empty.className = 'item';
+        empty.innerHTML = '<div class="grow"><div class="name">No .html files found</div><div class="muted">Add or drop files into the folder, then rescan.</div></div>';
+        listEl.appendChild(empty);
+        return;
+      }
+
+      for (const { name, handle } of files) {
+        const file = await handle.getFile().catch(() => null);
+        if (!file) continue;
+        const url = URL.createObjectURL(file);
+        lastURLs.set(name, url);
+
+        const item = document.createElement('div');
+        item.className = 'item';
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('width', '24'); icon.setAttribute('height', '24'); icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('fill', 'none');
+        icon.innerHTML = '<path d="M4 5a2 2 0 0 1 2-2h5l3 3h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Z" stroke="currentColor" stroke-width="1.7" />';
+        const nameEl = document.createElement('div');
+        nameEl.className = 'name grow';
+        nameEl.textContent = name;
+
+        const open = document.createElement('a');
+        open.className = 'open';
+        open.textContent = 'Open';
+        open.href = url;
+        open.target = '_blank';
+        open.rel = 'noopener';
+
+        item.appendChild(icon);
+        item.appendChild(nameEl);
+        item.appendChild(open);
+        listEl.appendChild(item);
+      }
+    }
+
+    async function pickFolder() {
+      if (!('showDirectoryPicker' in window)) {
+        alert('Your browser does not support folder access. Use Chrome/Edge desktop.');
+        return;
+      }
+      try {
+        dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        const ok = await verifyPermission(dirHandle, true);
+        if (!ok) {
+          alert('Permission denied. Cannot access this folder.');
+          return;
+        }
+        await idbSet('dir', dirHandle);
+        pathPill.textContent = formatPathFromHandle(dirHandle);
+        rescanBtn.disabled = false;
+        await renderList();
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        console.error(e);
+        alert('Failed to pick a folder.');
+      }
+    }
+
+    async function restoreFolder() {
+      try {
+        const saved = await idbGet('dir');
+        if (!saved) return;
+        // Attempt permission
+        const ok = await verifyPermission(saved, false);
+        if (!ok) return;
+        dirHandle = saved;
+        pathPill.textContent = formatPathFromHandle(dirHandle);
+        rescanBtn.disabled = false;
+        await renderList();
+      } catch (e) {
+        console.warn('Could not restore folder', e);
+      }
+    }
+
+    function setAutoRefresh(on) {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      if (on) {
+        refreshTimer = setInterval(() => renderList(), REFRESH_INTERVAL_MS);
+      }
+    }
+
+    // Drag & drop into selected folder
+    ;['dragenter','dragover'].forEach(type => {
+      dropzone.addEventListener(type, (e) => {
+        e.preventDefault(); e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+    ;['dragleave','drop'].forEach(type => {
+      dropzone.addEventListener(type, (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (type === 'drop') handleDrop(e);
+        dropzone.classList.remove('dragover');
+      });
+    });
+    async function handleDrop(e) {
+      if (!dirHandle) { alert('Choose a folder first.'); return; }
+      const files = e.dataTransfer?.files;
+      if (!files || !files.length) return;
+      let copied = 0, skipped = 0;
+      for (const file of files) {
+        try {
+          const fileHandle = await dirHandle.getFileHandle(file.name, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(file);
+          await writable.close();
+          copied++;
+        } catch (err) {
+          console.error('Copy failed for', file.name, err);
+          skipped++;
+        }
+      }
+      await renderList();
+      alert(`Added ${copied} file(s)` + (skipped ? `, ${skipped} skipped` : ''));
+    }
+
+    // Events
+    chooseBtn.addEventListener('click', pickFolder);
+    rescanBtn.addEventListener('click', renderList);
+    searchInput.addEventListener('input', () => renderList());
+    autoRefresh.addEventListener('change', (e) => setAutoRefresh(e.target.checked));
+
+    // Kickoff
+    restoreFolder();
+
+    // Cleanup object URLs when leaving
+    window.addEventListener('beforeunload', revokeURLs);
+  })();
+  </script>
 </body>
 </html>
-
