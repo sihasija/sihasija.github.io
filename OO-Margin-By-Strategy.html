@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OO — Margin % of NAV by Strategy</title>
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: #111827;
+    --muted: #94a3b8;
+    --fg: #e5e7eb;
+    --accent: #7dd3fc;
+    --accent2: #a78bfa;
+    --ok: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --border: #1f2937;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:linear-gradient(180deg, #0b0f14, #0a1018);
+    color:var(--fg);
+    font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  }
+  header{
+    padding:16px 24px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+  header h1{
+    font-size:18px;
+    margin:0;
+    letter-spacing:0.2px;
+    font-weight:700;
+  }
+  .tag{border:1px solid var(--border); padding:6px 10px; border-radius:999px; color:var(--muted)}
+  .wrap{max-width:1200px; margin:0 auto; padding:20px;}
+
+  .uploader{
+    border:1.5px dashed #2b3340;
+    background:#0e1621;
+    border-radius:14px;
+    padding:18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .uploader .left{
+    display:flex;align-items:center;gap:14px;
+  }
+  .uploader .icon{width:36px;height:36px;border-radius:10px;background:#101b28;display:flex;align-items:center;justify-content:center;border:1px solid var(--border)}
+  .uploader .icon svg{opacity:.9}
+  .uploader .hint{color:var(--muted)}
+  .uploader .dropzone{
+    flex:1;
+    min-height:56px;
+    display:flex;align-items:center;justify-content:center;
+    border:1px dashed #334155;
+    background:#0b121b;
+    border-radius:12px;
+    color:#9fb3c8;
+    cursor:pointer;
+    transition: all .15s ease;
+    text-align:center;
+    padding:10px;
+  }
+  .uploader .dropzone.drag{border-color:#60a5fa; color:#cfe6ff; background:#0a1524}
+  .uploader input[type=file]{display:none}
+  .grid{
+    margin-top:18px;
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:16px;
+  }
+  @media(min-width:900px){
+    .grid{grid-template-columns: 280px 1fr;}
+  }
+  .card{
+    border:1px solid var(--border);
+    background: #0f172a;
+    border-radius:14px;
+    padding:16px;
+  }
+  .card h3{margin:0 0 10px 0; font-size:14px; letter-spacing:.2px; color:#cbd5e1}
+  .small{font-size:12px;color:var(--muted)}
+  .strategy-list{
+    display:flex; flex-direction:column; gap:10px; max-height:460px; overflow:auto;
+    padding-right:6px;
+  }
+  .strategy-item{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px; padding:8px 10px; border-radius:10px;
+    border:1px solid #1e293b; background:#0b1220;
+  }
+  .strategy-item .name{display:flex; align-items:center; gap:10px;}
+  .swatch{width:14px;height:14px;border-radius:3px;border:1px solid #1f2937}
+  .toggle input{width:38px;height:20px;appearance:none;background:#1f2937;border-radius:999px; position:relative; outline:none; cursor:pointer; transition:background .15s}
+  .toggle input:checked{background:#2563eb}
+  .toggle input::after{
+    content:""; position:absolute; top:2px; left:2px; width:16px;height:16px;border-radius:999px;background:#e5e7eb; transition:left .15s;
+  }
+  .toggle input:checked::after{left:20px;background:white}
+  canvas{width:100%; height:480px; background:#0a111a; border-radius:12px; border:1px solid var(--border);}
+  .legend{display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; color:#cbd5e1}
+  .legend .item{display:flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid #1f2937; border-radius:8px; background:#0a121c}
+  footer{color:#94a3b8; font-size:12px; padding:12px 24px; border-top:1px solid var(--border);}
+  .btn{background:#111827; color:#d1d5db; border:1px solid #1f2937; padding:8px 10px; border-radius:8px; cursor:pointer;}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .stat{padding:6px 10px; border:1px solid #1f2937; border-radius:8px; background:#0a121c; color:#94a3b8}
+</style>
+</head>
+<body>
+<header>
+  <h1>OO — Margin % of NAV by Strategy</h1>
+  <span class="tag">Single‑file • Offline</span>
+</header>
+
+<div class="wrap">
+  <div class="uploader" id="uploader">
+    <div class="left">
+      <div class="icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 15l5-5 5 5" stroke="#9fb3c8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 10v9" stroke="#9fb3c8" stroke-width="2" stroke-linecap="round"/>
+          <path d="M20.39 18.39A5 5 0 0018 9h-1.26a8 8 0 10-13.53 6" stroke="#9fb3c8" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div><strong>Drag & drop</strong> your CSV here</div>
+        <div class="small">or click the box to choose a file</div>
+      </div>
+    </div>
+    <label class="dropzone" id="dropzone">Drop CSV or click to select<input id="file" type="file" accept=".csv,text/csv" /></label>
+    <button class="btn" id="demoBtn" title="Loads a tiny demo dataset">Load demo</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Strategies</h3>
+      <div class="small">Toggle to include/exclude each strategy from the stacked bars and totals.</div>
+      <div class="strategy-list" id="strategyList"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" id="selectAll">Select all</button>
+        <button class="btn" id="clearAll">Clear all</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between; margin-bottom:8px">
+        <h3 style="margin:0">Daily Stacked Bars (Margin % of NAV)</h3>
+        <div class="row">
+          <span class="stat" id="dateRangeStat">—</span>
+          <span class="stat" id="navStat">NAV: —</span>
+          <span class="stat" id="maxStat">Max total: —%</span>
+        </div>
+      </div>
+      <canvas id="chart" width="1200" height="480" aria-label="Stacked bar chart of margin percent of NAV"></canvas>
+      <div class="legend" id="legend"></div>
+      <div class="small" style="margin-top:6px">
+        Notes: Margin per strategy is summed across every day its trades are open (inclusive). NAV is taken from “Funds at Close” on close dates and carried forward/backward to other days. Columns are matched case‑insensitively. Required columns: <em>Strategy</em>, <em>Margin Req.</em>, <em>Funds at Close</em>, and <em>Date Opened</em> (optional <em>Date Closed</em>).
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>© OO Tools — single‑file app. No external libraries.</footer>
+
+<script>
+/* ---------- Minimal CSV parser (quotes + commas) ---------- */
+function parseCSV(text){
+  const rows = [];
+  let i=0, cur="", inQ=false, row=[];
+  while(i<text.length){
+    const ch = text[i];
+    if(inQ){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ cur+='"'; i+=2; continue; }
+        inQ=false; i++; continue;
+      } else { cur += ch; i++; continue; }
+    } else {
+      if(ch === '"'){ inQ=true; i++; continue; }
+      if(ch === ','){ row.push(cur); cur=""; i++; continue; }
+      if(ch === '\n'){
+        row.push(cur); rows.push(row); row=[]; cur=""; i++; continue;
+      }
+      if(ch === '\r'){ i++; continue; }
+      cur += ch; i++;
+    }
+  }
+  row.push(cur); rows.push(row);
+  // Trim potential trailing empty lines
+  while(rows.length && rows[rows.length-1].every(c=>c==="" )) rows.pop();
+  return rows;
+}
+
+/* ---------- Utilities ---------- */
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function toDate(x){
+  // Accepts "YYYY-MM-DD" or Date, returns Date or null
+  if(!x) return null;
+  if(x instanceof Date) return x;
+  // Try ISO first
+  const d = new Date(x);
+  if(!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return null;
+}
+function fmtDate(d){ return d ? d.toISOString().slice(0,10) : "—"; }
+function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+function* dateRange(a,b){
+  for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) yield new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function sum(arr){ return arr.reduce((a,b)=>a+(+b||0),0); }
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+function niceTicks(maxVal, count=6){
+  if(!isFinite(maxVal) || maxVal<=0) return [0,1,2,3,4,5];
+  const raw = maxVal / (count-1);
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const steps = [1,2,5,10];
+  const step = steps.find(s=> raw/pow <= s) * pow;
+  const ticks=[];
+  for(let t=0; t<=maxVal+1e-9; t+=step) ticks.push(Math.round(t*100)/100);
+  return ticks;
+}
+function colorFor(i, alpha=1){
+  // Pleasant distinct palette
+  const hues = [200, 160, 260, 20, 100, 300, 340, 60, 0, 120, 220, 280];
+  const h = hues[i % hues.length];
+  return `hsla(${h} 80% 60% / ${alpha})`;
+}
+function parseNumber(x){
+  // Handle commas and parentheses negatives
+  if(x==null) return NaN;
+  const s = String(x).trim();
+  if(!s) return NaN;
+  const neg = /^\(.*\)$/.test(s);
+  const cleaned = s.replace(/[,$]/g,"").replace(/^\(|\)$/g,"");
+  const v = parseFloat(cleaned);
+  return neg ? -v : v;
+}
+
+/* ---------- Core compute ---------- */
+function compute(series){
+  // series.rows: array of objects with fields
+  const rows = series.rows;
+  const haveClose = rows.some(r=>r.dateClosed);
+
+  const minOpen = rows.reduce((m,r)=> r.dateOpened && (!m||r.dateOpened<m) ? r.dateOpened : m, null);
+  const maxClose = rows.reduce((m,r)=> {
+    const d = r.dateClosed || r.dateOpened;
+    return d && (!m || d>m) ? d : m;
+  }, null);
+  if(!minOpen || !maxClose) throw new Error("No usable dates found.");
+
+  // Build timeline
+  const dates=[]; for(const d of dateRange(minOpen, maxClose)) dates.push(d);
+  const idx = new Map(dates.map((d,i)=>[fmtDate(d), i]));
+
+  // NAV by day from Funds at Close on close dates
+  const navArr = new Array(dates.length).fill(NaN);
+  for(const r of rows){
+    if(r.dateClosed && isFinite(r.nav)){
+      const i = idx.get(fmtDate(r.dateClosed));
+      if(i!=null) navArr[i] = r.nav;
+    }
+  }
+  // Fill: backfill then ffill ends
+  // backfill
+  for(let i=1;i<navArr.length;i++){
+    if(isNaN(navArr[i]) && !isNaN(navArr[i-1])) navArr[i] = navArr[i-1];
+  }
+  // ffill from first known
+  let first = navArr.find(v=>!isNaN(v));
+  if(first==null && rows.length){
+    // fall back to first provided nav anywhere
+    const any = rows.find(r=>isFinite(r.nav));
+    if(any) navArr.fill(any.nav);
+  } else {
+    let k = navArr.findIndex(v=>!isNaN(v));
+    for(let i=k-1; i>=0; i--) navArr[i] = navArr[i+1];
+  }
+
+  // Collect strategies
+  const strategies = Array.from(new Set(rows.map(r=>r.strategy).filter(Boolean))).sort();
+  const stratIndex = new Map(strategies.map((s,i)=>[s,i]));
+
+  // Daily margin by strategy
+  const margin = Array.from({length:dates.length}, ()=> new Float64Array(strategies.length).fill(0));
+  for(const r of rows){
+    if(!isFinite(r.margin) || !r.dateOpened) continue;
+    const start = r.dateOpened;
+    const end = r.dateClosed && r.dateClosed >= r.dateOpened ? r.dateClosed : r.dateOpened;
+    const sIdx = stratIndex.get(r.strategy);
+    if(sIdx==null) continue;
+    for(const d of dateRange(start, end)){
+      const j = idx.get(fmtDate(d));
+      if(j!=null) margin[j][sIdx] += r.margin;
+    }
+  }
+
+  // Convert to percent of NAV
+  const pct = margin.map((vec, i)=>{
+    const nav = navArr[i];
+    const out = new Float64Array(vec.length);
+    if(!isFinite(nav) || nav===0) return out;
+    for(let k=0;k<vec.length;k++) out[k] = 100 * (vec[k] / nav);
+    return out;
+  });
+
+  return {dates, strategies, pct, navArr};
+}
+
+/* ---------- Drawing (Canvas) ---------- */
+function draw(canvas, model, enabled){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0,0,W,H);
+
+  if(!model){ drawEmpty(ctx,W,H); return; }
+
+  const {dates, strategies, pct} = model;
+  const n = dates.length;
+  if(n===0){ drawEmpty(ctx,W,H); return; }
+
+  // Compute per-day totals for enabled strats
+  const selIdx = strategies.map((s,i)=> enabled.get(s) ? i : -1).filter(i=>i>=0);
+  const totals = new Float64Array(n);
+  for(let i=0;i<n;i++){
+    let t=0; for(const si of selIdx) t+= pct[i][si];
+    totals[i]=t;
+  }
+  const yMax = Math.max(1, Math.max(...totals));
+  const padL=50, padR=12, padT=16, padB=36;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const xStep = Math.max(1, plotW / n);
+  const barW = Math.max(1, Math.floor(xStep*0.9));
+
+  // Grid + axes
+  ctx.fillStyle="#0a1017";
+  ctx.fillRect(padL, padT, plotW, plotH);
+  ctx.strokeStyle="#1f2937";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.rect(padL, padT, plotW, plotH);
+  ctx.stroke();
+
+  // Y ticks
+  const ticks = niceTicks(yMax, 6);
+  ctx.strokeStyle="#1f2937"; ctx.fillStyle="#a3b1c6"; ctx.lineWidth=1;
+  for(const t of ticks){
+    const y = padT + plotH * (1 - t/yMax);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL+plotW, y); ctx.stroke();
+    ctx.fillText(String(t), 8, y+4);
+  }
+
+  // X ticks (monthly-ish)
+  const maxXTicks = 12;
+  const step = Math.ceil(n / maxXTicks);
+  ctx.fillStyle="#a3b1c6";
+  for(let i=0;i<n;i+=step){
+    const x = padL + i * xStep + barW/2;
+    const d = dates[i];
+    const label = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    ctx.fillText(label, x-24, H-10);
+  }
+
+  // Bars: stack each enabled strategy
+  // Precompute colors
+  const colors = strategies.map((_,i)=> colorFor(i,0.85));
+  for(let i=0;i<n;i++){
+    let acc=0;
+    const x = padL + i * xStep + Math.floor((xStep - barW)/2);
+    for(let si=0; si<strategies.length; si++){
+      if(!enabled.get(strategies[si])) continue;
+      const val = pct[i][si];
+      if(val<=0) continue;
+      const y0 = padT + plotH * (1 - (acc / yMax));
+      const y1 = padT + plotH * (1 - ((acc+val) / yMax));
+      const h = y0 - y1;
+      ctx.fillStyle = colors[si];
+      ctx.fillRect(x, y1, barW, Math.max(1,h));
+      acc += val;
+    }
+  }
+
+  // Total line
+  ctx.strokeStyle="#fbbf24"; ctx.lineWidth=1.6;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const x = padL + i * xStep + barW/2;
+    const y = padT + plotH * (1 - totals[i]/yMax);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Update stats
+  const rangeEl = document.getElementById("dateRangeStat");
+  const navEl = document.getElementById("navStat");
+  const maxEl = document.getElementById("maxStat");
+  rangeEl.textContent = fmtDate(dates[0]) + " → " + fmtDate(dates[n-1]);
+  // Show latest NAV (last non-NaN)
+  const lastNav = (model.navArr.slice().reverse().find(v=>isFinite(v))) ?? NaN;
+  navEl.textContent = "NAV: " + (isFinite(lastNav) ? Intl.NumberFormat().format(Math.round(lastNav)) : "—");
+  maxEl.textContent = "Max total: " + (Math.round(yMax*10)/10) + "%";
+}
+function drawEmpty(ctx,W,H){
+  ctx.fillStyle="#0a1017"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#91a1b7"; ctx.fillText("Load a CSV to begin…", 12, 22);
+}
+
+/* ---------- UI / State ---------- */
+let currentModel = null;
+const enabled = new Map(); // strategy -> boolean
+
+function setStrategies(strats){
+  enabled.clear();
+  const list = document.getElementById("strategyList");
+  const legend = document.getElementById("legend");
+  list.innerHTML = ""; legend.innerHTML="";
+  strats.forEach((s, i)=>{
+    enabled.set(s, true);
+    const item = document.createElement("div");
+    item.className = "strategy-item";
+    item.innerHTML = `
+      <div class="name">
+        <span class="swatch" style="background:${colorFor(i,0.9)}"></span>
+        <div>${s}</div>
+      </div>
+      <label class="toggle"><input type="checkbox" checked /></label>
+    `;
+    const cb = item.querySelector("input");
+    cb.addEventListener("change", ()=>{
+      enabled.set(s, cb.checked);
+      draw(document.getElementById("chart"), currentModel, enabled);
+    });
+    list.appendChild(item);
+
+    const lg = document.createElement("div");
+    lg.className="item";
+    lg.innerHTML = `<span class="swatch" style="background:${colorFor(i,0.9)}"></span><span>${s}</span>`;
+    legend.appendChild(lg);
+  });
+
+  document.getElementById("selectAll").onclick = ()=>{
+    list.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.checked=true);
+    strats.forEach(s=>enabled.set(s,true));
+    draw(document.getElementById("chart"), currentModel, enabled);
+  };
+  document.getElementById("clearAll").onclick = ()=>{
+    list.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.checked=false);
+    strats.forEach(s=>enabled.set(s,false));
+    draw(document.getElementById("chart"), currentModel, enabled);
+  };
+}
+
+function processCSV(text){
+  const rows = parseCSV(text);
+  if(!rows.length) throw new Error("Empty CSV");
+  const headers = rows[0].map(h=>h.trim());
+  const H = Object.fromEntries(headers.map((h,i)=>[h.toLowerCase(), i]));
+
+  function find(cols){
+    for(const c of cols){
+      const k = c.toLowerCase();
+      if(H.hasOwnProperty(k)) return H[k];
+      // loose match
+      const key = Object.keys(H).find(x=> x.replace(/\s+/g,"") === k.replace(/\s+/g,""));
+      if(key) return H[key];
+    }
+    return -1;
+  }
+
+  const idxStrategy = find(["Strategy"]);
+  const idxMargin   = find(["Margin Req.","Margin Req","Margin"]);
+  const idxFunds    = find(["Funds at Close","Funds","NAV"]);
+  const idxOpen     = find(["Date Opened","Open Date","Opening Date"]);
+  const idxClose    = find(["Date Closed","Close Date","Closing Date"]);
+
+  if(idxStrategy<0 || idxMargin<0 || idxFunds<0 || idxOpen<0){
+    throw new Error("Missing one of required columns: Strategy, Margin Req., Funds at Close, Date Opened");
+  }
+
+  const data = [];
+  for(let r=1;r<rows.length;r++){
+    const row = rows[r];
+    const strategy = row[idxStrategy]?.trim();
+    const margin = parseNumber(row[idxMargin]);
+    const nav = parseNumber(row[idxFunds]);
+    const dateOpened = toDate(row[idxOpen]);
+    const dateClosed = idxClose>=0 ? toDate(row[idxClose]) : null;
+    if(!strategy || !isFinite(margin) || !dateOpened) continue;
+    data.push({strategy, margin, nav, dateOpened, dateClosed});
+  }
+
+  const model = compute({rows:data});
+  currentModel = model;
+  setStrategies(model.strategies);
+  draw(document.getElementById("chart"), model, enabled);
+}
+
+/* ---------- File I/O ---------- */
+const dz = document.getElementById("dropzone");
+const fileInput = document.getElementById("file");
+dz.addEventListener("click", ()=> fileInput.click());
+dz.addEventListener("dragover", e=>{ e.preventDefault(); dz.classList.add("drag"); });
+dz.addEventListener("dragleave", ()=> dz.classList.remove("drag"));
+dz.addEventListener("drop", e=>{
+  e.preventDefault(); dz.classList.remove("drag");
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) readFile(f);
+});
+fileInput.addEventListener("change", e=>{
+  const f = e.target.files && e.target.files[0];
+  if(f) readFile(f);
+});
+
+function readFile(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      processCSV(e.target.result);
+    }catch(err){
+      alert("Parse error: " + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- Demo dataset (tiny) ---------- */
+const demoCSV = `Strategy,Margin Req.,Funds at Close,Date Opened,Date Closed
+7/21 DC QQQ | 10d15d | 2025-09-03,8000,100000,2025-06-01,2025-06-10
+7/21 DC QQQ | 10d15d | 2025-09-03,6000,102000,2025-06-05,2025-06-16
+10/28 DC QQQ | 15d20d | 2025-09-04,9000,103500,2025-06-02,2025-06-12
+10/28 DC QQQ | 15d20d | 2025-09-04,5000,104000,2025-06-13,2025-06-20
+DC 0/1 QQQ | 20d20d | LIVE,2500,105000,2025-06-08,2025-06-18
+`;
+document.getElementById("demoBtn").addEventListener("click", ()=> processCSV(demoCSV));
+
+/* ---------- Resize handling ---------- */
+const canvas = document.getElementById("chart");
+let resizeTimer = null;
+window.addEventListener("resize", ()=>{
+  if(!currentModel) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=> draw(canvas, currentModel, enabled), 100);
+});
+</script>
+</body>
+</html>
